@@ -1,2 +1,6 @@
 /doc/html
 /doc/latex
+*.o
+/src/glex
+/src/test
+/src/glex_gencode.c

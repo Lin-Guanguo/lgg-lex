@@ -7,7 +7,6 @@
 
 
 using node_set = std::unordered_set<int>;
-using node_map = std::unordered_map<int,int>;
 
 /**
  * @brief NFA DFA用的图
@@ -27,10 +26,10 @@ public:
     std::vector<int> head;     /**< @brief 链式前向星 */
 
     /**
-     * @brief 每个点的接受rank，0为最高，-1为不接受
+     * @brief 每个点的接受level，0为不接受，越高接受优先级越高
      * 
      */
-    std::vector<int> accept_rank;    
+    std::vector<int> accept_level;    
 public:
     /**
      * @brief 遍历一个起点出发的边
@@ -97,40 +96,40 @@ public:
     {
         if (head.size() <= std::max(start, to)) {
             head.resize(std::max(start, to) + 1, -1);
-            accept_rank.resize(std::max(start, to) + 1, -1);
+            accept_level.resize(std::max(start, to) + 1, 0);
         }
         edges.push_back({ head[start], to, c });
         head[start] = edges.size() - 1;
     }
     
     /**
-     * @brief 获得点的rank
+     * @brief 获得点的level
      * 
      * @param i 点序号
-     * @return int rank
+     * @return int level
      */
-    int get_rank(int i)
+    int get_level(int i)
     {
         if(head.size() <= i){
             head.resize(i + 1, -1);
-            accept_rank.resize(i + 1, -1);
+            accept_level.resize(i + 1, 0);
         }
-        return accept_rank[i];
+        return accept_level[i];
     }
 
     /**
-     * @brief 设置点的接受rank
+     * @brief 设置点的接受level
      * 
      * @param i 点序号
-     * @param r rank
+     * @param r level
      */
-    void set_rank(int i, int r)
+    void set_level(int i, int r)
     {
         if(head.size() <= i){
             head.resize(i + 1, -1);
-            accept_rank.resize(i + 1, -1);
+            accept_level.resize(i + 1, 0);
         }
-        accept_rank[i] = r;
+        accept_level[i] = r;
     }
 
     /**
@@ -140,7 +139,7 @@ public:
     void print()
     {
         this->visit_all_edge([this](int i, edge_t& e) {
-            printf("%d --[%c]-->%d: %d\n", i, e.c == -1 ? '#' : e.c, e.to, this->accept_rank[e.to]);
+            printf("%d --[%c]-->%d: %d\n", i, e.c == -1 ? '#' : e.c, e.to, this->accept_level[e.to]);
         });
     }
 };
@@ -217,7 +216,7 @@ public:
                     node_cnt++;
                 }
             }
-            g.set_rank(node_cnt, rank);
+            g.set_level(node_cnt, regexs.size() - rank);
         }
         for(int i : each_re_start){
             g.add_edge(this->start_node, i, g.EPSILON);
@@ -263,12 +262,12 @@ public:
      * @brief 从n0出发的epsilon闭包
      *
      * @param n0 出发点
-     * @param highest_rank 转移后闭包中rank最高的点
+     * @param highest_level 转移后闭包中level最高的点
      * @return node_set epsilon闭包包含的点
      */
-    node_set epsilon_closure(int n0, int* highest_rank)
+    node_set epsilon_closure(int n0, int* highest_level)
     {
-        *highest_rank = -1;
+        *highest_level = 0;
         node_set search;
         std::stack<int> no_search;
         no_search.push(n0);
@@ -276,13 +275,8 @@ public:
             int n = no_search.top(); no_search.pop();
             if (search.find(n) == search.end()) {
                 search.insert(n);
-                auto r = this->nfa.g.get_rank(n);
-                if( r != -1) {
-                    if (*highest_rank == -1)
-                        *highest_rank = r;
-                    else
-                        *highest_rank = std::min(*highest_rank, r);
-                }
+                auto r = this->nfa.g.get_level(n);
+                *highest_level = std::max(*highest_level, r);
                 nfa.g.visit_edge_node_c(n, graph_t::EPSILON, [&](graph_t::edge_t& e) {
                     no_search.push(e.to);
                     });
@@ -296,12 +290,12 @@ public:
      * 
      * @param closure epsilon闭包包含的点
      * @param c 转移输入
-     * @param highest_rank 转移后闭包中rank最高的点
+     * @param highest_level 转移后闭包中level最高的点
      * @return node_set 转移后的epsilon闭包包含的点
      */
-    node_set epsilon_closure_delta(node_set& closure, int c, int* highest_rank)
+    node_set epsilon_closure_delta(node_set& closure, int c, int* highest_level)
     {
-        *highest_rank = -1;
+        *highest_level = -1;
         node_set search;
         std::stack<int> no_search;
         // c转移一步
@@ -316,29 +310,23 @@ public:
             int n = no_search.top(); no_search.pop();
             if (search.find(n) == search.end()) {
                 search.insert(n);
-                auto r = this->nfa.g.get_rank(n);
-                if( r != -1){
-                    if (*highest_rank == -1)
-                        *highest_rank = r;
-                    else
-                        *highest_rank = std::min(*highest_rank, r);
-                }
+                auto r = this->nfa.g.get_level(n);
+                *highest_level = std::max(*highest_level, r);
                 nfa.g.visit_edge_node_c(n, graph_t::EPSILON, [&](graph_t::edge_t& e) {
                     no_search.push(e.to);
                     });
             }
         }
-
         return search;
     }
 
     dfa_t(nfa_t nfa_) : nfa(nfa_)
     {
-        int rank;
+        int level;
         int node_cnt = 0;
-        auto q = epsilon_closure(0, &rank);
+        auto q = epsilon_closure(0, &level);
         node_group.emplace(q, node_cnt);
-        g.set_rank(node_cnt, rank);
+        g.set_level(node_cnt, level);
         node_cnt++;
 
         std::stack<node_set> work_list;
@@ -347,7 +335,7 @@ public:
             q = work_list.top(); work_list.pop();
             int from = node_group[q];
             for (int c = 0; c < 255; ++c) {
-                auto t = epsilon_closure_delta(q, c, &rank);
+                auto t = epsilon_closure_delta(q, c, &level);
                 if (t.empty()) 
                     continue;
                 int to;
@@ -355,7 +343,7 @@ public:
                     node_group.emplace(t, node_cnt);
                     work_list.push(t);
                     to = node_cnt;
-                    g.set_rank(node_cnt, rank);
+                    g.set_level(node_cnt, level);
                     node_cnt++;
                 }
                 else {
@@ -413,7 +401,7 @@ int lgg_lex_step(int* state, int c, int* accept){
         for(int n = 0; n < g.head.size(); ++n){
             fprintf(file, state_case, n);
             g.visit_edge_node(n, [&](graph_t::edge_t& e){
-                fprintf(file, char_case, (int)e.c, e.to, this->g.accept_rank[e.to]);
+                fprintf(file, char_case, (int)e.c, e.to, this->g.accept_level[e.to]);
             });
             fprintf(file, char_default);
         }
@@ -433,7 +421,7 @@ void test_dfa()
         d.print();
         printf("\n\n"); 
         
-        FILE* f = fopen("gen_code.c", "w");
+        FILE* f = fopen("glex_gencode.c", "w");
         d.gen_code(f);
         fclose(f);
     }
