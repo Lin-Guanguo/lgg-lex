@@ -1,10 +1,20 @@
+/**
+ * @file glex.cc
+ * @author Lin guanguo (lin.guanguo@foxmail.com)
+ * @brief glex主文件, glex使用者不需要接触
+ * @version 0.1
+ * @date 2021-10-24
+ * 
+ * @copyright Copyright (c) 2021
+ * 
+ */
+
 #include <stdio.h>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
 #include <string>
 #include <stack>
-
 
 using node_set = std::unordered_set<int>;
 
@@ -381,7 +391,7 @@ public:
  * @param accept 接受等级 -1: 不接受; 0,1,2...: 接受等级(0级最优先)
  * @return int  -1: 无转移; -2: 未知状态; 0: 进入下一状态;
  */
-int lgg_lex_step(int* state, int c, int* accept){
+inline int glex_step(int* state, int c, int* accept){
     switch (*state){)";
         constexpr auto state_case = R"(
     case %d:
@@ -395,7 +405,8 @@ int lgg_lex_step(int* state, int c, int* accept){
     default: return -2;
     }
     return 0;
-})";
+}
+)";
 
         fprintf(file, code_head, "gen_code.c");
         for(int n = 0; n < g.head.size(); ++n){
@@ -409,25 +420,27 @@ int lgg_lex_step(int* state, int c, int* accept){
     }
 };
 
-void test_dfa()
-{
-    {
-        auto n = nfa_t({
-            {"\\(ab*\\)"}, {"1235"}, {"h"}
-            });
-        n.print();
-        printf("\n\n");
-        auto d = dfa_t(n);
-        d.print();
-        printf("\n\n"); 
-        
-        FILE* f = fopen("glex_gencode.c", "w");
-        d.gen_code(f);
-        fclose(f);
-    }
+void test(){
+    auto n = nfa_t({
+        {"if"},
+        {"while"},
+        {"var"},
+        {"="},
+        {"(1|2|3|4|5|6|7|8|9)(0|1|2|3|4|5|6|7|8|9)*"},
+        {" |\n|\t"},
+    });
+    n.print();
+    printf("\n\n");
+    auto d = dfa_t(n);
+    d.print();
+    printf("\n\n"); 
+    
+    FILE* f = fopen("glex_gencode.h", "w");
+    d.gen_code(f);
+    fclose(f);
 }
 
 int main()
 {
-    test_dfa();
+    test();
 }

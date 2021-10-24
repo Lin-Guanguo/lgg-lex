@@ -1,13 +1,15 @@
-GCC = clang++ -g -Wall
+GCC = clang++ -g -Wall -std=c++17
 
 # target
-glex:  main.cc
-	$(GCC) -o glex main.cc
+glex:  glex.cc
+	$(GCC) -o glex glex.cc
 
-
-test: test.cc
+# test
+test: test.cc glex_lib.h glex_gencode.h
 	$(GCC) -o test test.cc
+glex_gencode.h: glex
+	./glex
 
 .PHONY: clean
 clean:
-	rm -f *.o glex test
+	rm -f *.o glex test glex_gencode.h
