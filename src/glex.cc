@@ -422,12 +422,7 @@ inline int glex_step(int* state, int c, int* accept){
 
 void test(){
     auto n = nfa_t({
-        {"if"},
-        {"while"},
-        {"var"},
-        {"="},
-        {"(1|2|3|4|5|6|7|8|9)(0|1|2|3|4|5|6|7|8|9)*"},
-        {" |\n|\t"},
+        #include "pattern.gl"
     });
     n.print();
     printf("\n\n");

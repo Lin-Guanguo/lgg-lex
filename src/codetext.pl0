@@ -1,0 +1,21 @@
+const pi=3,four=4;
+var a,a1,v2;
+
+procedure hello
+begin
+    write(10);
+    write(10);
+end
+
+procedure world
+call hello;
+
+begin
+    a := 10;
+    b := 5;
+    while a do
+    begin
+        if a then
+            a := a - 1;
+    end
+end

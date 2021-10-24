@@ -1,7 +1,7 @@
 GCC = clang++ -g -Wall -std=c++17
 
 # target
-glex:  glex.cc
+glex:  glex.cc pattern.gl
 	$(GCC) -o glex glex.cc
 
 # test

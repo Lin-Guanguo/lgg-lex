@@ -1,3 +1,0 @@
-10 if
-10=10 abc d while
-whil whi
