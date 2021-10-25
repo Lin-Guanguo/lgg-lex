@@ -22,7 +22,7 @@
 class glex
 {
     FILE* file;
-    long long fileoff = 0l;
+    long fileoff = 0l;
     std::string match;
 public:
     glex(FILE* file_) : file(file_)
@@ -51,19 +51,17 @@ public:
         match.clear();
         int state = 0;
         int accept;
-        char c;
+        int c;
         int level = 0;      // 当前匹配最高等级的模式
         int level_off = 0;  // 对应读取字符数
         int cur_off = 0;
 
         fseek(file, fileoff, SEEK_SET);
-        int read_r = fread(&c, 1, 1, file);
-        ++cur_off;
-        // EOF退出
-        if (read_r == 0){
-            return -1;
-        }
+        if((c = fgetc(file)) == EOF){
+            return -1; // EOF退出
+        };
         for(;;){
+            ++cur_off;
             int step_r = glex_step(&state, (int)c, &accept);
             // step_r == 0:     合法转移 
             // step_r == -1:    非法转移
@@ -74,11 +72,9 @@ public:
                     level_off = cur_off;
                 }
                 match.push_back(c);
-                int read_r = fread(&c, 1, 1, file);
-                ++cur_off;
-                if (read_r == 0){
-                    break;  // EOF
-                }
+                if((c = fgetc(file)) == EOF){
+                    break; // EOF退出
+                };
             }else{
                 assert(step_r == -1);
                 break; // 非法转移
