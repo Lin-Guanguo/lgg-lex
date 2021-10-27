@@ -10,10 +10,13 @@
  */
 
 #include <stdio.h>
+#include <iostream>
+#include <fstream>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
 #include <string>
+#include <string_view>
 #include <stack>
 
 using node_set = std::unordered_set<int>;
@@ -185,7 +188,6 @@ public:
                     c = ')';
                 else
                     c = re[i];
-
                 if (c == '(') {
                     // 进入括号范围，入栈
                     stack.push({ node_cnt, c });
@@ -368,20 +370,76 @@ public:
     {
         this->g.print();
     }
+};
 
-    void gen_code(FILE* file)
-    {
-        // code template
-        constexpr auto code_head = R"(/**
- * @file %s
- * @author generate by lgg-lex
- * @brief 自动生成的lex程序
- * @version 0.1
- * @date 2021-10-14
- * 
- * @copyright Copyright (c) 2021
- * 
- */
+
+bool isBlank(char t){
+    return t <= ' ';
+}
+
+void read_rule(std::ifstream& f, std::vector<std::string>* tokens, std::vector<std::string>* rules)
+{
+    std::string buf;
+    std::string rule;
+    for(;;){
+        buf.clear();
+        std::getline(f, buf);
+        auto i = buf.begin();
+        // 跳过行首空白
+        for(; i != buf.end() && isBlank(*i); ++i);
+        // 读到空行停止
+        if(i == buf.end())
+            break;
+        auto j = i;
+        for(; !isBlank(*j); ++j);
+        tokens->emplace_back(i, j);
+
+        // 读到规则说明
+        for(; *j != '"'; ++j);
+        // 开始读规则
+        rule.clear();
+        for(++j; *j != '"'; ++j){
+            if(*j == '\\'){
+                ++j;
+                switch(*j){
+                case 'r': rule.push_back('\r'); break;
+                case 'n': rule.push_back('\n'); break;
+                case 't': rule.push_back('\t'); break;
+                case '\\': rule.push_back('\\'); break;
+                case ')': rule.append("\\)"); break;
+                case '(': rule.append("\\("); break;
+                case '|': rule.append("\\|"); break;
+                case '*': rule.append("\\*"); break;
+                default:
+                    break;
+                }
+            }else{
+                rule.push_back(*j);
+            }
+        }
+        rules->push_back(std::move(rule));
+    }
+}
+
+void gen_code(FILE* cfile, FILE* hfile, graph_t& g, std::vector<std::string> tokens)
+{
+    // code template
+    constexpr auto code_head = R"(/**
+* @file glex_gencode.cc
+* @author generate by lgg-lex
+* @brief 自动生成的lex程序
+* @version 0.1
+* @date 2021-10-14
+* 
+* @copyright Copyright (c) 2021
+* 
+*/
+
+#include <stdio.h>
+#include <assert.h>
+#include <string>
+#include <string_view>
+#include "glex_gencode.h"
 
 /**
  * @brief 状态转移函数
@@ -391,51 +449,169 @@ public:
  * @param accept 接受等级 -1: 不接受; 0,1,2...: 接受等级(0级最优先)
  * @return int  -1: 无转移; -2: 未知状态; 0: 进入下一状态;
  */
-inline int glex_step(int* state, int c, int* accept){
-    switch (*state){)";
-        constexpr auto state_case = R"(
-    case %d:
-        switch (c){)";
-        constexpr auto char_case = R"(
-        case %d: *state = %d; *accept = %d; break;)";
-        constexpr auto char_default = R"(
-        default: return -1;
-        } break;)";
-        constexpr auto state_default = R"(
-    default: return -2;
+int glex::glex_step(int* state, int c, int* accept){
+switch (*state){)";
+    constexpr auto state_case = R"(
+case %d:
+    switch (c){)";
+    constexpr auto char_case = R"(
+    case %d: *state = %d; *accept = %s; break;)";
+    constexpr auto char_default = R"(
+    default: return -1;
+    } break;)";
+    constexpr auto state_default = R"(
+default: return -2;
+}
+return 0;
+}
+
+int glex::next_match() 
+{
+    match.clear();
+    int state = 0;
+    int accept;
+    int c;
+    int level = 0;      // 当前匹配最高等级的模式
+    int level_off = 0;  // 对应读取字符数
+    int cur_off = 0;
+
+    fseek(file, fileoff, SEEK_SET);
+    if((c = fgetc(file)) == EOF){
+        return -1; // EOF退出
+    };
+    for(;;){
+        ++cur_off;
+        int step_r = glex_step(&state, (int)c, &accept);
+        // step_r == 0:     合法转移 
+        // step_r == -1:    非法转移
+        // step_r == -2:    理论上不存在
+        if (step_r == 0){
+            if (accept >= level){
+                level = accept;
+                level_off = cur_off;
+            }
+            match.push_back(c);
+            if((c = fgetc(file)) == EOF){
+                break; // EOF退出
+            };
+        }else{
+            assert(step_r == -1);
+            break; // 非法转移
+        }
     }
-    return 0;
+    if (level == 0){
+        // 全部不能匹配则至少跳过一个字符
+        if (match.size() == 0) {
+            match.push_back(c);
+        }
+        // 跳过不能匹配的字符
+        fileoff += match.size();
+        return -2;
+    }
+    fileoff += level_off;
+    return level;
 }
 )";
-
-        fprintf(file, code_head, "gen_code.c");
-        for(int n = 0; n < g.head.size(); ++n){
-            fprintf(file, state_case, n);
-            g.visit_edge_node(n, [&](graph_t::edge_t& e){
-                fprintf(file, char_case, (int)e.c, e.to, this->g.accept_level[e.to]);
-            });
-            fprintf(file, char_default);
-        }
-        fprintf(file, state_default);
+    fprintf(cfile, code_head);
+    for(int n = 0; n < g.head.size(); ++n){
+        fprintf(cfile, state_case, n);
+        g.visit_edge_node(n, [&](graph_t::edge_t& e){
+            fprintf(cfile, char_case, (int)e.c, e.to, 
+                g.accept_level[e.to] == 0 ? "NONE" : tokens[tokens.size() - g.accept_level[e.to]].data());
+        });
+        fprintf(cfile, char_default);
     }
-};
+    fprintf(cfile, state_default);
 
-void test(){
-    auto n = nfa_t({
-        #include "pattern.gl"
-    });
+    constexpr auto header_head = R"(/**
+ * @file glex_gencode.h
+ * @author generate by lgg-lex
+ * @brief 自动生成的lex程序
+ * @version 0.1
+ * @date 2021-10-24
+ * 
+ * @copyright Copyright (c) 2021
+ * 
+ */
+
+#include <stdio.h>
+#include <string>
+#include <string_view>
+
+/**
+ * @brief glex类
+ * 
+ */
+class glex
+{
+    FILE* file;
+    long fileoff = 0l;
+    std::string match;
+public:
+    enum Token{
+        NONE = 0,)";
+    constexpr auto header_enum = R"(
+        %s = %d,)";
+    constexpr auto header_class = R"(
+    };
+
+    glex(FILE* file_) : file(file_) { };
+
+    /**
+     * @brief 状态转移函数
+     * 
+     * @param state 输入当前状态, 输出下一状态
+     * @param c 转移字符
+     * @param accept 接受等级 -1: 不接受; 0,1,2...: 接受等级(0级最优先)
+     * @return int  -1: 无转移; -2: 未知状态; 0: 进入下一状态;
+     */
+    static int glex_step(int* state, int c, int* accept);
+
+    /**
+     * @brief 获得上一次调用next_match()匹配的字符串
+     * 
+     * @return const std::string_view 
+     */
+    const std::string_view get_match() { return match; }
+
+    /**
+     * @brief 调用该函数获取下一个匹配, 至少匹配一个字符
+     * 
+     * @return int  -1: EOF; 
+     *              -2: No Match Input, skip longest valid prefix
+     */
+    int next_match();
+};
+)";
+    fprintf(hfile, header_head);
+    for(int i = tokens.size() - 1; i >= 0; --i){
+        fprintf(hfile, header_enum, tokens[i].data() , tokens.size() - i);
+    }
+    fprintf(hfile, header_class);
+}
+
+int main(int argc, char** argv)
+{
+    if(argc != 2){
+        printf("usage ./glex [rulefile]\n");
+        return -1;
+    }
+    auto fr = std::ifstream{argv[1]};
+    std::vector<std::string> tokens;
+    std::vector<std::string> rules;
+    read_rule(fr, &tokens, &rules);
+
+    auto n = nfa_t(rules);
     n.print();
     printf("\n\n");
     auto d = dfa_t(n);
     d.print();
     printf("\n\n"); 
     
-    FILE* f = fopen("glex_gencode.h", "w");
-    d.gen_code(f);
-    fclose(f);
-}
-
-int main()
-{
-    test();
+    FILE* cf = fopen("glex_gencode.cc", "w");
+    FILE* hf = fopen("glex_gencode.h", "w");
+    gen_code(cf, hf, d.g, tokens);
+    fclose(cf);
+    fclose(hf);
+    return 0;
 }

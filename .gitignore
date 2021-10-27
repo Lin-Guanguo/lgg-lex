@@ -4,3 +4,4 @@
 /src/glex
 /src/test
 /src/glex_gencode.h
+/src/glex_gencode.cc
