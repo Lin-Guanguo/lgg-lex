@@ -6,9 +6,14 @@
 #include "glex_gencode.h"
 
 
-int main()
+int main(int argc, const char** argv)
 {
-    FILE* f = fopen("test_rule_program.pl0", "r");
+    if(argc <= 1)
+    {
+        printf("usage: pl0-lex [inputfile]");
+        return 0;
+    }
+    FILE* f = fopen(argv[1], "r");
     glex l{f};
     int r;
     while( (r = l.next_match()) != -1){
